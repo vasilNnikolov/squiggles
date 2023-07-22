@@ -1,3 +1,4 @@
+import pickle
 from typing import List, Set, Tuple
 
 import numpy as np
@@ -8,7 +9,7 @@ def convert_to_binary_image() -> np.ndarray:
     """
     converts the image into a binary numpy array of shape (height, width)
     """
-    outline = Image.open("logo_outline.png").convert("RGB").resize((100, 100))
+    outline = Image.open("logo_outline.png").convert("RGB")
     w, h = outline.size
     print(f"width and height are ({w}, {h})")
 
@@ -20,7 +21,7 @@ def convert_to_binary_image() -> np.ndarray:
     return np.apply_along_axis(lambda color: tuple(color) == fill_color, 2, pixels)
 
 
-def bordering_cells(cell: Tuple[int, int], h, w):
+def bordering_cells(cell: Tuple[int, int], h: int, w: int):
     """
     returns the cells bordering the given one, in the form (cell_y, cell_x)
     """
@@ -38,31 +39,44 @@ def bordering_cells(cell: Tuple[int, int], h, w):
     )
 
 
-def find_border_of_well(a: np.ndarray) -> np.ndarray:
-    # border = np.zeros_like(a, dtype=bool)
-
-    def is_bordering_cell(cell, a):
-        return any(
-            [a[bc] == False for bc in bordering_cells(cell, a.shape[0], a.shape[1])]
-        )
-
-    return np.vectorize(lambda cell: is_bordering_cell(cell, a))(a)
-    return np.zeros_like(a)
-
-
-def find_taxicab_distance_to_well(
-    a: np.ndarray, border_of_well: List[Tuple[int, int]]
-) -> np.ndarray:
+def find_taxicab_distance_to_well(a: np.ndarray) -> np.ndarray:
     """
     well is an area of the binary array a that is True
     """
     h, w = a.shape
     distance = np.full_like(a, fill_value=None, dtype=object)
+    start_point = (h // 2, w // 2)
+    distance[start_point] = 0
 
-    for edge_cell in border_of_well:
-        distance[edge_cell] = 0
-    list_of_edges = border_of_well
+    # find border of well, bucket fill the well and take note of the border pixels
+    border_cells: List[Tuple[int, int]] = []
+    list_of_edges = [start_point]
+    print("start finding edges")
 
+    while True:
+        new_list_of_edges: Set[Tuple[int, int]] = set()
+        for edge_cell in list_of_edges:
+            if a[edge_cell]:
+                distance[edge_cell] = 0
+            if any(
+                map(lambda cell: a[cell] == False, bordering_cells(edge_cell, h, w))
+            ):
+                border_cells.append(edge_cell)
+
+            unvisited_neighbors_inside_well = filter(
+                lambda cell: distance[cell] is None and a[cell],
+                bordering_cells(edge_cell, h, w),
+            )
+
+            new_list_of_edges = new_list_of_edges.union(unvisited_neighbors_inside_well)
+
+        list_of_edges = list(new_list_of_edges)
+        if len(list_of_edges) == 0:
+            break
+
+    print("found all the edges")
+
+    list_of_edges = border_cells
     while True:
         new_list_of_edges: Set[Tuple[int, int]] = set()
         for edge_cell in list_of_edges:
@@ -107,35 +121,24 @@ def find_taxicab_distance_to_well(
     return distance
 
 
-def find_distance_to_well(a: np.ndarray) -> np.ndarray:
-    h, w = a.shape
-    output = np.zeros_like(a)
-    for i in range(h):
-        for j in range(w):
-            if a[i, j]:
-                output[i, j] = 0.0
-            else:
-                pass
+# def find_distance_to_well(a: np.ndarray) -> np.ndarray:
+#     h, w = a.shape
+#     output = np.zeros_like(a)
+#     for i in range(h):
+#         for j in range(w):
+#             if a[i, j]:
+#                 output[i, j] = 0.0
+#             else:
+#                 pass
 
-    return output
+#     return output
 
 
 def main():
-    bin_array = convert_to_binary_image()
-    # bin_image = Image.fromarray(bin_array).convert("RGB")
+    bin_array = np.asarray(Image.open("bucket_fill.png").convert("1"))
 
-    # one_pixel_array = np.zeros_like(bin_array, dtype=bool)
-    # one_pixel_array[450, 450] = True
+    distance = find_taxicab_distance_to_well(bin_array)
 
-    # find border of binary image
-    border = find_border_of_well(bin_array)
-    border_image = Image.fromarray(border).convert("RGB")
-    border_image.show()
-    return
-
-    distance = find_taxicab_distance_to_well(bin_array, [])
-    print(distance.shape, np.max(distance))
-    print(np.any(distance == None))
     distance_image = Image.fromarray(
         np.array((254.0 / np.max(distance)) * distance, dtype=np.uint8)
     )
