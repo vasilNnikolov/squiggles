@@ -166,12 +166,13 @@ def find_distance_to_well(bin_array: np.ndarray) -> np.ndarray:
         return rotated_a
 
     for rotation_index in range(0, N_ROTATIONS):
-        angle_to_rotate = 2 * np.pi * rotation_index / N_ROTATIONS
+        # 2/3 since the logo has 120 degree symmetry
+        angle_to_rotate = 2.0 / 3.0 * np.pi * rotation_index / N_ROTATIONS
 
         rotated_arrays[:, :, rotation_index] = rotate_array(
             larger_original, angle_to_rotate
         )
-        Image.fromarray(rotated_arrays[:, :, rotation_index]).convert("RGB").show()
+        # Image.fromarray(rotated_arrays[:, :, rotation_index]).convert("RGB").show()
         # run taxicab distance on rotated array and update the distance array
         rotated_distance = find_taxicab_distance_to_well(
             rotated_arrays[:, :, rotation_index], center_of_rotation
