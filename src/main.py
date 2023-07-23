@@ -128,7 +128,7 @@ def find_taxicab_distance_to_well(
 def find_distance_to_well(bin_array: np.ndarray) -> np.ndarray:
     h, w = bin_array.shape
 
-    N_ROTATIONS = 10
+    N_ROTATIONS = 30
     # applicable for every image, slower
     # diagonal_length = int(np.sqrt(h**2 + w**2)) + 1
     # applicable for circular designs, not applicable for every image
