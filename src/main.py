@@ -1,7 +1,9 @@
 from typing import List, Set, Tuple
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw
+from tqdm import tqdm
 
 
 def convert_to_binary_image() -> np.ndarray:
@@ -185,17 +187,52 @@ def find_distance_to_well(bin_array: np.ndarray) -> np.ndarray:
     return np.min(distance, axis=2)
 
 
+def find_gradient(image: np.ndarray) -> np.ndarray:
+    """
+    finds the gradient of the grayscale image and returns it in the form array((image.shape,2))
+    """
+    x_filter = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])
+    y_filter = np.transpose(x_filter)
+    # grad_x = cv2.filter2D(src=image, ddepth=-1, kernel=x_filter)
+    # grad_y = cv2.filter2D(src=image, ddepth=-1, kernel=y_filter)
+    # grad_x = cv2.Sobel(image, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=ksize)
+    grad_x = cv2.Sobel(
+        src=image, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=5
+    )  # Sobel Edge Detection on the X axis
+    grad_y = cv2.Sobel(
+        src=image, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=5
+    )  # Sobel Edge Detection on the X axis
+    # grad_y = cv2.Sobel(image, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=ksize)
+    gradient = np.stack([grad_y, grad_x], axis=2)
+    return gradient
+
+
+def potential(image: np.ndarray) -> np.ndarray:
+    return 10e-2 * image**2
+
+
 def main():
-    bin_array = np.asarray(Image.open("bucket_fill.png").convert("1"))
-    h, w = bin_array.shape
+    distance_image = np.array(Image.open("approx_eucl_distance_image_full.png"))
+    force = -find_gradient(potential(distance_image))
 
-    distance = find_distance_to_well(bin_array)
-
-    distance_image = Image.fromarray(
-        np.array((254.0 / np.max(distance)) * distance, dtype=np.uint8)
-    )
-    distance_image.show()
-    distance_image.save("approx_eucl_distance_image.png")
+    # f_y, f_x = force[:, :, 0], force[:, :, 1]
+    # main simulation
+    B = 10
+    E_strength = 10
+    angle = 0
+    q = 1
+    pos = np.array([400.0, 400.0])
+    vel = np.array([10.0, 0.0])
+    dt = 0.0001
+    T_end = 10
+    for _ in tqdm(range(int(T_end / dt))):
+        F = (
+            force[int(pos[0]), int(pos[1])]
+            + E_strength * np.array([np.cos(angle), np.sin(angle)])
+            + B * np.array([-vel[1], vel[0]])
+        )
+        vel += F * dt
+        pos += vel * dt
 
 
 if __name__ == "__main__":
