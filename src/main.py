@@ -196,19 +196,9 @@ def find_gradient(image: np.ndarray) -> np.ndarray:
     """
     finds the gradient of the grayscale image and returns it in the form array((image.shape,2))
     """
-    x_filter = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])
-    y_filter = np.transpose(x_filter)
-    # grad_x = cv2.filter2D(src=image, ddepth=-1, kernel=x_filter)
-    # grad_y = cv2.filter2D(src=image, ddepth=-1, kernel=y_filter)
-    # grad_x = cv2.Sobel(image, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=ksize)
-    grad_x = cv2.Sobel(
-        src=image, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=5
-    )  # Sobel Edge Detection on the X axis
-    grad_y = cv2.Sobel(
-        src=image, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=5
-    )  # Sobel Edge Detection on the X axis
-    # grad_y = cv2.Sobel(image, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=ksize)
-    gradient = np.stack([grad_y, grad_x], axis=2)
+    grad_x = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=5)
+    grad_y = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=5)
+    gradient = np.stack([np.transpose(grad_x), np.transpose(grad_y)], axis=2)
     return gradient
 
 
@@ -268,7 +258,7 @@ def main():
     pos = np.array([400.0, 400.0])
     vel = np.array([10.0, 0.0])
     dt = 0.01
-    T_end = 100
+    T_end = 1000
     N_points = int(T_end / dt)
     positions = np.zeros((N_points, 2))
 
@@ -284,12 +274,13 @@ def main():
         trace.set_data(positions[:frame_index, 0], positions[:frame_index, 1])
         return (trace,)
 
-    plt.plot(positions[:, 0], positions[:, 1])
+    # plt.plot(positions[:, 0], positions[:, 1])
+    plt.imshow(Image.open("approx_eucl_distance_image_full.png"))
     ani = animation.FuncAnimation(
         fig,
         lambda frame_index: animate(frame_index, pos, vel),
         len(positions),
-        interval=10000 / len(positions),
+        interval=0,
         blit=True,
     )
     plt.show()
