@@ -1,6 +1,11 @@
 from typing import List, Set, Tuple
 
+import matplotlib
+
+matplotlib.use("TkAgg")
 import cv2
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw
 from tqdm import tqdm
@@ -208,31 +213,86 @@ def find_gradient(image: np.ndarray) -> np.ndarray:
 
 
 def potential(image: np.ndarray) -> np.ndarray:
-    return 10e-2 * image**2
+    return image**2
 
 
-def main():
-    distance_image = np.array(Image.open("approx_eucl_distance_image_full.png"))
+def num_integrate(distance_image):
     force = -find_gradient(potential(distance_image))
 
     # f_y, f_x = force[:, :, 0], force[:, :, 1]
     # main simulation
-    B = 10
+    B = 0.5
     E_strength = 10
-    angle = 0
+    angle = np.pi / 2
     q = 1
     pos = np.array([400.0, 400.0])
     vel = np.array([10.0, 0.0])
-    dt = 0.0001
-    T_end = 10
-    for _ in tqdm(range(int(T_end / dt))):
+    dt = 0.01
+    T_end = 100
+    N_points = int(T_end / dt)
+    positions = np.zeros((N_points, 2))
+    for frame_index in tqdm(range(N_points)):
         F = (
             force[int(pos[0]), int(pos[1])]
-            + E_strength * np.array([np.cos(angle), np.sin(angle)])
-            + B * np.array([-vel[1], vel[0]])
+            + q * E_strength * np.array([np.cos(angle), np.sin(angle)])
+            + q * B * np.array([-vel[1], vel[0]])
         )
         vel += F * dt
         pos += vel * dt
+        positions[frame_index] = pos
+
+    return positions
+
+
+def main():
+    distance_image = np.array(Image.open("approx_eucl_distance_image_full.png"))
+    # initialize graphics
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(
+        # autoscale_on=False,
+        xlim=(0, distance_image.shape[1]),
+        ylim=(0, distance_image.shape[0]),
+    )
+    ax.set_aspect("equal")
+    (trace,) = ax.plot([], [])
+
+    # animation
+    force = -find_gradient(potential(distance_image))
+
+    # f_y, f_x = force[:, :, 0], force[:, :, 1]
+    # main simulation
+    B = 0.5
+    E_strength = 10
+    angle = np.pi / 2
+    q = 1
+    pos = np.array([400.0, 400.0])
+    vel = np.array([10.0, 0.0])
+    dt = 0.01
+    T_end = 100
+    N_points = int(T_end / dt)
+    positions = np.zeros((N_points, 2))
+
+    def animate(frame_index: int, pos, vel):
+        F = (
+            force[int(pos[0]), int(pos[1])]
+            + q * E_strength * np.array([np.cos(angle), np.sin(angle)])
+            + q * B * np.array([-vel[1], vel[0]])
+        )
+        vel += F * dt
+        pos += vel * dt
+        positions[frame_index] = pos
+        trace.set_data(positions[:frame_index, 0], positions[:frame_index, 1])
+        return (trace,)
+
+    plt.plot(positions[:, 0], positions[:, 1])
+    ani = animation.FuncAnimation(
+        fig,
+        lambda frame_index: animate(frame_index, pos, vel),
+        len(positions),
+        interval=10000 / len(positions),
+        blit=True,
+    )
+    plt.show()
 
 
 if __name__ == "__main__":
