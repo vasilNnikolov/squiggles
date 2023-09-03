@@ -196,9 +196,22 @@ def find_gradient(image: np.ndarray) -> np.ndarray:
     """
     finds the gradient of the grayscale image and returns it in the form array((image.shape,2))
     """
-    grad_x = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=9)
-    grad_y = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=9)
-    gradient = np.stack([np.transpose(grad_x), np.transpose(grad_y)], axis=2)
+    # scale image down
+    scale_down_factor = 255 / np.max(image)
+    image_scaled = scale_down_factor * image.astype(np.float64)
+    grad_x = cv2.Sobel(src=image_scaled, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=9)
+    grad_y = cv2.Sobel(src=image_scaled, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=9)
+    gradient = (
+        1
+        / scale_down_factor
+        * np.stack(
+            [
+                np.transpose(grad_x.astype(np.float64)),
+                np.transpose(grad_y.astype(np.float64)),
+            ],
+            axis=2,
+        )
+    )
     return gradient
 
 
@@ -242,20 +255,29 @@ def main():
     image_center = np.array(distance_image.shape) / 2
 
     # initialize graphics
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(
-        # autoscale_on=False,
-        xlim=(0, distance_image.shape[1]),
-        ylim=(0, distance_image.shape[0]),
-    )
+    # fig = plt.figure(figsize=(10, 10))
+    # ax = fig.add_subplot(
+    #     # autoscale_on=False,
+    #     xlim=(0, distance_image.shape[1]),
+    #     ylim=(0, distance_image.shape[0]),
+    # )
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10, 10))
+    ax.set_xlim((0, distance_image.shape[1]))
+    ax.set_ylim((0, distance_image.shape[0]))
     ax.set_aspect("equal")
+
     (trace,) = ax.plot([], [], linewidth=1)
     (arrow,) = ax.plot([], [])
-    time_text = ax.text(0.05, 0.9, "", transform=ax.transAxes, color="white")
+    time_text = ax.text(0.05, 0.9, "", color="white")
+
+    (potential_trace,) = ax2.plot([], [])
+    ax2.set_xlim((0, 40))
+    ax2.set_ylim((0, 36621862.56))
 
     # animation
     potential_field = get_potential(distance_image)
     force = -find_gradient(potential_field)
+    print(f"max of potential is {np.max(potential_field)}")
 
     class SimulationState:
         def __init__(self):
@@ -265,7 +287,7 @@ def main():
             self.q = 1
             self.pos = np.array([400.0, 400.0])
             self.vel = np.array([100.0, 0.0])
-            self.dt = 0.01
+            self.dt = 0.1
             self.current_time = 0
             self.T_end = 1000
             self.N_points = int(self.T_end / self.dt)
@@ -273,9 +295,8 @@ def main():
         def update_parameters(self, potential_field: np.ndarray):
             int_position = (int(self.pos[0]), int(self.pos[1]))
             potential = potential_field[int_position]
-            pot_factor = 1 + potential
             self.dt = 1 / (self.vel[0] ** 2 + self.vel[1] ** 2) ** 0.5 + 0.001
-            self.B = 2 / pot_factor
+            # self.B = 2 / (1 + potential)
             self.current_time += self.dt
             self.angle += 2 * np.pi * self.dt / 70
             F = (
@@ -285,15 +306,20 @@ def main():
                 * np.array([np.cos(self.angle), np.sin(self.angle)])
                 + self.q * self.B * np.array([-self.vel[1], self.vel[0]])
             )
+            # friction
+            # F +=
             self.vel += F * self.dt
             self.pos += self.vel * self.dt
 
     # main simulation
     s = SimulationState()
     positions = np.zeros((s.N_points, 2))
+    potentials = np.zeros(s.N_points)
+    times = np.zeros(s.N_points)
 
     def animate(frame_index, s: SimulationState):
         s.update_parameters(potential_field)
+        int_position = (int(s.pos[0]), int(s.pos[1]))
         positions[frame_index] = s.pos
 
         # draw to screen
@@ -305,16 +331,28 @@ def main():
         )
         # text with progress
         time_text.set_text(
-            f"Progress: {frame_index/s.N_points:.4f}%\nSimulation time {s.current_time:.4f} s\nB is {s.B}\ndt is {s.dt}"
+            f"""
+            Progress: {frame_index/s.N_points:.4f}%
+            Simulation time {s.current_time:.4f} s
+            B is {s.B:.4f}
+            dt is {s.dt:.4f}
+            Potential is {potential_field[int_position]}
+            position is {int_position}"""
         )
+
+        potentials[frame_index] = potential_field[int_position]
+        times[frame_index] = s.current_time
+        potential_trace.set_data(times[:frame_index], potentials[:frame_index])
         return (
             trace,
             arrow,
             time_text,
+            potential_trace,
         )
 
     log_potential_field = np.log(1 + potential_field)
-    plt.imshow(255 / np.max(log_potential_field) * log_potential_field)
+    # plt.imshow(255 / np.max(log_potential_field) * log_potential_field)
+    ax.imshow(log_potential_field)
     ani = animation.FuncAnimation(
         fig,
         lambda frame_index: animate(frame_index, s),
