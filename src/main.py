@@ -203,7 +203,7 @@ def find_gradient(image: np.ndarray) -> np.ndarray:
 
 
 def potential(image: np.ndarray) -> np.ndarray:
-    return image**2
+    return 3 * 10e-2 * image**2
 
 
 def num_integrate(distance_image):
@@ -235,7 +235,12 @@ def num_integrate(distance_image):
 
 
 def main():
-    distance_image = np.array(Image.open("approx_eucl_distance_image_full.png"))
+    main_image = cv2.GaussianBlur(
+        np.array(Image.open("approx_eucl_distance_image_full.png")), (11, 11), 0
+    )
+    distance_image = np.array(main_image)
+    image_center = np.array(distance_image.shape) / 2
+
     # initialize graphics
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(
@@ -244,42 +249,58 @@ def main():
         ylim=(0, distance_image.shape[0]),
     )
     ax.set_aspect("equal")
-    (trace,) = ax.plot([], [])
+    (trace,) = ax.plot([], [], linewidth=1)
+    (arrow,) = ax.plot([], [])
+    time_text = ax.text(0.05, 0.9, "", transform=ax.transAxes, color="white")
 
     # animation
     force = -find_gradient(potential(distance_image))
 
-    # f_y, f_x = force[:, :, 0], force[:, :, 1]
+    class SimulationState:
+        def __init__(self):
+            self.B = 1
+            self.E_strength = 10
+            self.angle = np.pi / 2
+            self.q = 1
+            self.pos = np.array([400.0, 400.0])
+            self.vel = np.array([50.0, 0.0])
+            self.dt = 0.01
+            self.T_end = 1000
+            self.N_points = int(self.T_end / self.dt)
+
     # main simulation
-    B = 0.5
-    E_strength = 10
-    angle = np.pi / 2
-    q = 1
-    pos = np.array([400.0, 400.0])
-    vel = np.array([10.0, 0.0])
-    dt = 0.01
-    T_end = 1000
-    N_points = int(T_end / dt)
-    positions = np.zeros((N_points, 2))
+    s = SimulationState()
+    positions = np.zeros((s.N_points, 2))
 
-    def animate(frame_index: int, pos, vel):
+    def animate(frame_index, s: SimulationState):
+        s.angle += 2 * np.pi * s.dt / 30
         F = (
-            force[int(pos[0]), int(pos[1])]
-            + q * E_strength * np.array([np.cos(angle), np.sin(angle)])
-            + q * B * np.array([-vel[1], vel[0]])
+            force[int(s.pos[0]), int(s.pos[1])]
+            + s.q * s.E_strength * np.array([np.cos(s.angle), np.sin(s.angle)])
+            + s.q * s.B * np.array([-s.vel[1], s.vel[0]])
         )
-        vel += F * dt
-        pos += vel * dt
-        positions[frame_index] = pos
+        s.vel += F * s.dt
+        s.pos += s.vel * s.dt
+        positions[frame_index] = s.pos
         trace.set_data(positions[:frame_index, 0], positions[:frame_index, 1])
-        return (trace,)
+        # draw arrow in direction of E field
+        arrow.set_data(
+            [image_center[0], image_center[0] + 100 * np.cos(s.angle)],
+            [image_center[1], image_center[1] + 100 * np.sin(s.angle)],
+        )
+        # text with progress
+        time_text.set_text(f"Progress: {frame_index/s.N_points:.4f}%")
+        return (
+            trace,
+            arrow,
+            time_text,
+        )
 
-    # plt.plot(positions[:, 0], positions[:, 1])
-    plt.imshow(Image.open("approx_eucl_distance_image_full.png"))
+    plt.imshow(main_image)
     ani = animation.FuncAnimation(
         fig,
-        lambda frame_index: animate(frame_index, pos, vel),
-        len(positions),
+        lambda frame_index: animate(frame_index, s),
+        s.N_points,
         interval=0,
         blit=True,
     )
