@@ -196,14 +196,14 @@ def find_gradient(image: np.ndarray) -> np.ndarray:
     """
     finds the gradient of the grayscale image and returns it in the form array((image.shape,2))
     """
-    grad_x = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=5)
-    grad_y = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=5)
+    grad_x = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=1, dy=0, ksize=9)
+    grad_y = cv2.Sobel(src=image, ddepth=cv2.CV_64F, dx=0, dy=1, ksize=9)
     gradient = np.stack([np.transpose(grad_x), np.transpose(grad_y)], axis=2)
     return gradient
 
 
-def potential(image: np.ndarray) -> np.ndarray:
-    return 3 * 10e-2 * image**2
+def get_potential(image: np.ndarray) -> np.ndarray:
+    return 10e-3 * (image.astype(np.float64)) ** 4
 
 
 def num_integrate(distance_image):
@@ -236,7 +236,7 @@ def num_integrate(distance_image):
 
 def main():
     main_image = cv2.GaussianBlur(
-        np.array(Image.open("approx_eucl_distance_image_full.png")), (11, 11), 0
+        np.array(Image.open("approx_eucl_distance_image_full.png")), (17, 17), 0
     )
     distance_image = np.array(main_image)
     image_center = np.array(distance_image.shape) / 2
@@ -254,34 +254,49 @@ def main():
     time_text = ax.text(0.05, 0.9, "", transform=ax.transAxes, color="white")
 
     # animation
-    force = -find_gradient(potential(distance_image))
+    potential_field = get_potential(distance_image)
+    force = -find_gradient(potential_field)
 
     class SimulationState:
         def __init__(self):
-            self.B = 1
+            self.B = 2
             self.E_strength = 10
             self.angle = np.pi / 2
             self.q = 1
             self.pos = np.array([400.0, 400.0])
-            self.vel = np.array([50.0, 0.0])
+            self.vel = np.array([100.0, 0.0])
             self.dt = 0.01
+            self.current_time = 0
             self.T_end = 1000
             self.N_points = int(self.T_end / self.dt)
+
+        def update_parameters(self, potential_field: np.ndarray):
+            int_position = (int(self.pos[0]), int(self.pos[1]))
+            potential = potential_field[int_position]
+            pot_factor = 1 + potential
+            self.dt = 1 / (self.vel[0] ** 2 + self.vel[1] ** 2) ** 0.5 + 0.001
+            self.B = 2 / pot_factor
+            self.current_time += self.dt
+            self.angle += 2 * np.pi * self.dt / 70
+            F = (
+                force[int_position]
+                + self.q
+                * self.E_strength
+                * np.array([np.cos(self.angle), np.sin(self.angle)])
+                + self.q * self.B * np.array([-self.vel[1], self.vel[0]])
+            )
+            self.vel += F * self.dt
+            self.pos += self.vel * self.dt
 
     # main simulation
     s = SimulationState()
     positions = np.zeros((s.N_points, 2))
 
     def animate(frame_index, s: SimulationState):
-        s.angle += 2 * np.pi * s.dt / 30
-        F = (
-            force[int(s.pos[0]), int(s.pos[1])]
-            + s.q * s.E_strength * np.array([np.cos(s.angle), np.sin(s.angle)])
-            + s.q * s.B * np.array([-s.vel[1], s.vel[0]])
-        )
-        s.vel += F * s.dt
-        s.pos += s.vel * s.dt
+        s.update_parameters(potential_field)
         positions[frame_index] = s.pos
+
+        # draw to screen
         trace.set_data(positions[:frame_index, 0], positions[:frame_index, 1])
         # draw arrow in direction of E field
         arrow.set_data(
@@ -289,14 +304,17 @@ def main():
             [image_center[1], image_center[1] + 100 * np.sin(s.angle)],
         )
         # text with progress
-        time_text.set_text(f"Progress: {frame_index/s.N_points:.4f}%")
+        time_text.set_text(
+            f"Progress: {frame_index/s.N_points:.4f}%\nSimulation time {s.current_time:.4f} s\nB is {s.B}\ndt is {s.dt}"
+        )
         return (
             trace,
             arrow,
             time_text,
         )
 
-    plt.imshow(main_image)
+    log_potential_field = np.log(1 + potential_field)
+    plt.imshow(255 / np.max(log_potential_field) * log_potential_field)
     ani = animation.FuncAnimation(
         fig,
         lambda frame_index: animate(frame_index, s),
