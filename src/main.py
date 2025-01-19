@@ -1,8 +1,9 @@
-from typing import List, Set, Tuple
+from typing import Tuple
 
 import matplotlib
 
 matplotlib.use("TkAgg")
+
 import cv2
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -249,19 +250,12 @@ def num_integrate(distance_image):
 
 def main():
     main_image = cv2.GaussianBlur(
-        np.array(Image.open("approx_eucl_distance_image_full.png")), (17, 17), 0
+        np.array(Image.open("approx_eucl_distance_image_full.png")), (27, 27), 0
     )
     distance_image = np.array(main_image)
     image_center = np.array(distance_image.shape) / 2
 
-    # initialize graphics
-    # fig = plt.figure(figsize=(10, 10))
-    # ax = fig.add_subplot(
-    #     # autoscale_on=False,
-    #     xlim=(0, distance_image.shape[1]),
-    #     ylim=(0, distance_image.shape[0]),
-    # )
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(10, 10))
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(20, 10))
     ax.set_xlim((0, distance_image.shape[1]))
     ax.set_ylim((0, distance_image.shape[0]))
     ax.set_aspect("equal")
@@ -270,12 +264,12 @@ def main():
     (arrow,) = ax.plot([], [])
     time_text = ax.text(0.05, 0.9, "", color="white")
 
+    potential_field = get_potential(distance_image)
     (potential_trace,) = ax2.plot([], [])
     ax2.set_xlim((0, 40))
-    ax2.set_ylim((0, 36621862.56))
+    ax2.set_ylim((0, np.quantile(potential_field, 0.9)))
 
     # animation
-    potential_field = get_potential(distance_image)
     force = -find_gradient(potential_field)
     print(f"max of potential is {np.max(potential_field)}")
 
@@ -285,17 +279,18 @@ def main():
             self.E_strength = 10
             self.angle = np.pi / 2
             self.q = 1
-            self.pos = np.array([400.0, 400.0])
+            # position and velocity are (x,y)
+            self.pos = np.array([466.0, 805.0])
             self.vel = np.array([100.0, 0.0])
-            self.dt = 0.1
+            self.dt = 0.01
             self.current_time = 0
             self.T_end = 1000
             self.N_points = int(self.T_end / self.dt)
 
         def update_parameters(self, potential_field: np.ndarray):
             int_position = (int(self.pos[0]), int(self.pos[1]))
-            potential = potential_field[int_position]
-            self.dt = 1 / (self.vel[0] ** 2 + self.vel[1] ** 2) ** 0.5 + 0.001
+            potential = potential_field[int(self.pos[1]), int(self.pos[0])]
+            # self.dt = 1 / (self.vel[0] ** 2 + self.vel[1] ** 2) ** 0.5 + 0.001
             # self.B = 2 / (1 + potential)
             self.current_time += self.dt
             self.angle += 2 * np.pi * self.dt / 70
